@@ -239,11 +239,6 @@ SELECT * FROM exploded_conditions LIMIT 10
 
 -- COMMAND ----------
 
--- MAGIC %md
--- MAGIC By far the most common entry in the 'Conditions' column is 'Healthy'. I assume this is because healthy individuals were used in control groups for many of these trials. Cancer also appears 3 times in this list of top 10 most common conditions, as Breast Cancer (2nd place), Prostate Cancer (7th place) and Cancer (10th place). This is somewhat misleading as breast cancer and prostate cancers are both subsets of the broader category of "Cancer", not separate conditions. Furthermore, in the view called 'split_conditions' above, I can see that row 8 contains a list of conditions including "Stage I Prostate Cancer", "Stage II Prostate Cancer" and "Stage III Prostate Cancer". Terms like these should be aggregated with the term "Prostate Cancer", which is currently the 7th most common condition in the count above. There are probably other instances of this inaccurate separation in the dataset (for example, it might be appropirate to aggregate "severe depression" with "depression" and "chronic pain" with "pain" if those terms occur in the "Conditions" column). However, this is beyond the scope of this assignment. 
-
--- COMMAND ----------
-
 -- Count the frequenct of each condition, order the conditions from most to least frequent, show the top 10 most frequent conditions 
 SELECT `col`, COUNT(*) as frequency
 FROM exploded_conditions
@@ -253,11 +248,64 @@ ORDER BY COUNT(*) DESC LIMIT 10;
 -- COMMAND ----------
 
 -- MAGIC %md
+-- MAGIC By far the most common entry in the 'Conditions' column is 'Healthy'. I assume this is because healthy individuals were used in control groups for many of these trials. Cancer also appears 3 times in this list of top 10 most common conditions, as Breast Cancer (2nd place), Prostate Cancer (7th place) and Cancer (10th place). This is somewhat misleading as breast cancer and prostate cancers are both subsets of the broader category of "Cancer", not separate conditions. Furthermore, in the view called 'split_conditions' above, I can see that row 8 contains a list of conditions including "Stage I Prostate Cancer", "Stage II Prostate Cancer" and "Stage III Prostate Cancer". Terms like these should be aggregated with the term "Prostate Cancer", which is currently the 7th most common condition in the count above. There are probably other instances of this inaccurate separation in the dataset (for example, it might be appropirate to aggregate "severe depression" with "depression" and "chronic pain" with "pain" if those terms occur in the "Conditions" column). However, this is beyond the scope of this assignment. 
+
+-- COMMAND ----------
+
+-- MAGIC %md
 -- MAGIC # Question 3
 -- MAGIC
 -- MAGIC **For studies with an end date, calculate the mean clinical trial length in months.**
--- MAGIC
--- MAGIC NB! Watch out for outliers skewing the mean (eg v v short or vv long trials)
+
+-- COMMAND ----------
+
+-- Create temporary view of just the start date and completion date columns, and only the rows where neither of those fields are blank
+
+CREATE OR REPLACE TEMP VIEW ct2 AS SELECT `Start Date`, `Completion Date` FROM ct1 WHERE `Completion Date` IS NOT NULL AND `Start Date` IS NOT NULL
+
+-- COMMAND ----------
+
+-- Inspect top 20 rows of new temporary view to check it worked 
+
+SELECT * FROM ct2 LIMIT 20
+
+-- COMMAND ----------
+
+-- Add column that calculates Duration of each trial in days by subtracting the start date from the end date. Use ABS to return only positive integers (that is, exclude any rows where the start date is after the end date)
+CREATE OR REPLACE TEMP VIEW ct3 AS
+SELECT *, 
+       ABS(DATEDIFF(MONTH, `Completion Date`, `Start Date`)) AS Duration
+FROM ct2;
+
+
+-- COMMAND ----------
+
+-- Check above code worked 
+SELECT * FROM ct3 LIMIT 10
+
+-- COMMAND ----------
+
+-- Calculate mean duration (in months) of all trials 
+
+SELECT ROUND(AVG(Duration), 0) AS Average_Duration FROM ct3
+
+-- COMMAND ----------
+
+-- MAGIC %md
+-- MAGIC The mean duration of the clinical trials is 35 months. However, I want to check if mean is a good reflection of the average trial length for this dataset. To do this, I will count the frequency of each trial duration and sort these frequencies by trial duration
+
+-- COMMAND ----------
+
+-- Count frequencies of trial durations and sort from longest duration to shortest duration 
+SELECT `Duration`, COUNT(*) as frequency
+FROM ct3
+GROUP BY `Duration`
+ORDER BY `Duration` DESC;
+
+-- COMMAND ----------
+
+-- MAGIC %md
+-- MAGIC By visualising the above table as a scatter graph (with Duration along the x axis), I can see that there is a very long tail of long durations (up to 1,320 months) that have very low frequencies. This tail is likely to be skewing the mean up. If I were to calculate the median trial duration I think it would be a more accurate reflection of the average trial duration, and would likely be lower than the mean. However, this is beyong the scope of this assignment. 
 
 -- COMMAND ----------
 
@@ -269,6 +317,47 @@ ORDER BY COUNT(*) DESC LIMIT 10;
 -- MAGIC (For this you can assume all relevant studies will contain an exact match for ‘Diabetes’ or ‘diabetes’ in the Conditions column.)
 -- MAGIC
 -- MAGIC
+
+-- COMMAND ----------
+
+-- Create temporary view of trials with non-null completion date and Sudy Status of 'COMPLETED'
+
+CREATE OR REPLACE TEMP VIEW ct4 AS SELECT `Conditions`, `Study Status`, `Start Date`, `Completion Date` FROM ct1 WHERE `Completion Date` IS NOT NULL AND `Study Status`="COMPLETED"
+
+-- COMMAND ----------
+
+-- Check the code above worked 
+SELECT * FROM ct4 LIMIT 10
+
+-- COMMAND ----------
+
+
+-- From the above temoprary view, show only the rows that contain the word 'diabetes' (case-insenstive) in the 'Conditions' column 
+CREATE OR REPLACE TEMP VIEW ct5 AS SELECT * FROM ct4 WHERE Conditions ILIKE '%diabetes%';
+
+
+-- COMMAND ----------
+
+SELECT * FROM ct5  LIMIT 10;
+
+-- COMMAND ----------
+
+-- count how many EACH YEAR 
+-- visualise 
+
+CREATE OR REPLACE TEMP VIEW ct6 AS
+SELECT *, 
+       YEAR(TO_DATE(`Completion Date`, 'dd-MM-yyyy')) AS Year
+FROM ct5;
+
+SELECT * FROM ct6  LIMIT 10;
+
+-- COMMAND ----------
+
+SELECT COUNT(Conditions), Year
+FROM ct6
+GROUP BY Year
+ORDER BY Year DESC;
 
 -- COMMAND ----------
 
